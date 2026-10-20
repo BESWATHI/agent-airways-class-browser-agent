@@ -6,10 +6,13 @@ Run from the MAIN project folder (not inside team_tests):
 
 What happens:
   * The TEST (not the tool) uses Playwright to get to each screen:
-    it chooses the airports and picks a flight. The tool only clicks.
+    it chooses the airports, picks a flight, picks a seat, and fills in
+    the passenger form. The tool only clicks.
   * Then the test calls the tool: click_step_button.run(page, argument, context)
   * After every call, the test looks at the REAL page itself, so we do not
     just trust what the tool says about itself.
+  * All four approved buttons are tested end to end, plus a failure case
+    and a safety case.
 """
 
 import sys
@@ -86,12 +89,32 @@ try:
     record("search_flights: tool says ok", result["ok"] is True)
     record("search_flights: #resultsStage is really visible", results_visible)
 
-    # ===== TEST 2: FAILURE - Continue before choosing a seat ==============
-    print("\n=== TEST 2 (failure): continue_from_seat with NO seat chosen ===")
+    # ===== TEST 2: SUCCESS - close the flight details popup ===============
+    print("\n=== TEST 2 (success): close_details ===")
 
     # Setup done by the TEST: wait for the flight list (about 1.2 seconds),
-    # then choose the first flight so the seat screen appears.
-    page.wait_for_selector("button.choose")
+    # then open the details popup of the first flight.
+    page.wait_for_selector("button.details")
+    page.locator("button.details").first.click()
+    page.wait_for_selector("#flightDialog", state="visible")
+    print("Setup: #flightDialog visible =", page.locator("#flightDialog").is_visible())
+
+    call = {"button": "close_details"}
+    print("Tool call:", call)
+    result = click_step_button.run(page, call, context)
+    print("Tool returned:", result)
+
+    # Independent check: the popup must really be closed.
+    dialog_visible = page.locator("#flightDialog").is_visible()
+    print("Browser evidence: #flightDialog visible =", dialog_visible)
+
+    record("close_details: tool says ok", result["ok"] is True)
+    record("close_details: #flightDialog is really closed", dialog_visible is False)
+
+    # ===== TEST 3: FAILURE - Continue before choosing a seat ==============
+    print("\n=== TEST 3 (failure): continue_from_seat with NO seat chosen ===")
+
+    # Setup done by the TEST: choose the first flight so the seat screen appears.
     page.locator("button.choose").first.click()
     page.wait_for_selector("#seatStage", state="visible")
 
@@ -116,8 +139,8 @@ try:
     record("continue_from_seat: #passengerStage is still hidden",
            passenger_visible is False)
 
-    # ===== TEST 3: SAFETY - confirm_reservation must be refused ===========
-    print("\n=== TEST 3 (safety): confirm_reservation is refused ===")
+    # ===== TEST 4: SAFETY - confirm_reservation must be refused ===========
+    print("\n=== TEST 4 (safety): confirm_reservation is refused ===")
     call = {"button": "confirm_reservation"}
     print("Tool call:", call)
     result = click_step_button.run(page, call, context)
@@ -135,6 +158,48 @@ try:
            review_visible is False)
     record("confirm_reservation: page did not move (still on seat screen)",
            seat_still_visible)
+
+    # ===== TEST 5: SUCCESS - continue_from_seat, then continue_to_review ==
+    print("\n=== TEST 5 (success): continue_from_seat and continue_to_review ===")
+
+    # Setup done by the TEST: pick the first available seat.
+    page.locator("#seatMap button.seat:not(.unavailable)").first.click()
+    print("Setup: chose a seat. Continue enabled =",
+          page.locator("#continueFromSeat").is_enabled())
+
+    call = {"button": "continue_from_seat"}
+    print("Tool call:", call)
+    result = click_step_button.run(page, call, context)
+    print("Tool returned:", result)
+
+    # Independent check: the passenger screen must really be showing now.
+    passenger_visible = page.locator("#passengerStage").is_visible()
+    print("Browser evidence: #passengerStage visible =", passenger_visible)
+
+    record("continue_from_seat (seat chosen): tool says ok", result["ok"] is True)
+    record("continue_from_seat (seat chosen): #passengerStage is really visible",
+           passenger_visible)
+
+    # Setup done by the TEST: fill in the passenger form with the class sample values.
+    page.fill("#passengerName", "Alex Student")
+    page.fill("#passengerEmail", "alex@example.com")
+
+    call = {"button": "continue_to_review"}
+    print("Tool call:", call)
+    result = click_step_button.run(page, call, context)
+    print("Tool returned:", result)
+
+    # Independent check: the review screen must really be showing,
+    # and the reservation must NOT have been confirmed.
+    review_visible = page.locator("#reviewStage").is_visible()
+    confirmation_visible = page.locator("#confirmationStage").is_visible()
+    print("Browser evidence: #reviewStage visible =", review_visible)
+    print("Browser evidence: #confirmationStage visible =", confirmation_visible)
+
+    record("continue_to_review: tool says ok", result["ok"] is True)
+    record("continue_to_review: #reviewStage is really visible", review_visible)
+    record("continue_to_review: reservation was NOT confirmed",
+           confirmation_visible is False)
 
 finally:
     browser_tools.close_browser()
