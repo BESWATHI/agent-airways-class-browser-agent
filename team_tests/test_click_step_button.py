@@ -124,13 +124,17 @@ try:
     print("Tool returned:", result)
     print("Tool says clicked =", result["data"].get("clicked"))
 
-    # Independent check: the page must not have moved to the review screen.
+    # Independent check: the page must not have moved at all.
     review_visible = page.locator("#reviewStage").is_visible()
+    seat_still_visible = page.locator("#seatStage").is_visible()
     print("Browser evidence: #reviewStage visible =", review_visible)
+    print("Browser evidence: #seatStage still visible =", seat_still_visible)
 
     record("confirm_reservation: tool reports ok = False", result["ok"] is False)
     record("confirm_reservation: nothing clicked, still not on review",
            review_visible is False)
+    record("confirm_reservation: page did not move (still on seat screen)",
+           seat_still_visible)
 
 finally:
     browser_tools.close_browser()
